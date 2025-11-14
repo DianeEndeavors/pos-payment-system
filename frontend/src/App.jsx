@@ -328,10 +328,12 @@ export default function PrintShopPOS() {
   }, [customerSearch]);
 
   // Handle new sale
-  const handleNewSale = (preserveCustomer = false) => {
+  const handleNewSale = (preserveCustomer = false, preserveCart = false) => {
     setCurrentPage('pos');
     setStep('pos');
-    setCart([]);
+    if (!preserveCart) {
+      setCart([]);
+    }
     if (!preserveCustomer) {
       setSelectedCustomer(null);
     }
@@ -623,13 +625,13 @@ export default function PrintShopPOS() {
               Home
             </button>
             <button
-              onClick={handleNewSale}
+              onClick={() => setCurrentPage('pos')}
               className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
                 currentPage === 'pos' ? 'bg-indigo-700' : 'bg-indigo-500 hover:bg-indigo-600'
               }`}
             >
               <ShoppingCart className="w-4 h-4" />
-              New Sale
+              {cart.length > 0 ? 'Continue Sale' : 'New Sale'}
             </button>
             <button
               onClick={() => setCurrentPage('customers')}
@@ -711,11 +713,11 @@ export default function PrintShopPOS() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* New Sale Button */}
                 <button
-                  onClick={handleNewSale}
+                  onClick={() => setCurrentPage('pos')}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 px-6 rounded-lg transition-colors flex items-center justify-center gap-3 text-lg"
                 >
                   <ShoppingCart className="w-6 h-6" />
-                  New Sale
+                  {cart.length > 0 ? 'Continue Sale' : 'New Sale'}
                 </button>
 
                 {/* Customer Search */}
@@ -1118,13 +1120,26 @@ export default function PrintShopPOS() {
                       </div>
                     </div>
 
-                    <div className="p-4 border-t border-gray-200">
+                    <div className="p-4 border-t border-gray-200 space-y-2">
                       <button
                         onClick={handleProceedToCheckout}
                         className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
                       >
                         <CreditCard className="w-5 h-5" />
                         Proceed to Checkout
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Clear the entire cart and start a new order?')) {
+                            setCart([]);
+                            setSelectedCustomer(null);
+                            setOrderNotes('');
+                          }
+                        }}
+                        className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Clear Cart
                       </button>
                     </div>
                   </>
@@ -1337,7 +1352,7 @@ export default function PrintShopPOS() {
                               <button
                                 onClick={() => {
                                   setSelectedCustomer(customer);
-                                  handleNewSale(true);
+                                  handleNewSale(true, true);
                                 }}
                                 className="text-green-600 hover:text-green-700 p-1"
                                 title="New Sale"
@@ -1376,11 +1391,11 @@ export default function PrintShopPOS() {
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-2xl font-bold text-gray-900">Order History</h2>
                   <button
-                    onClick={handleNewSale}
+                    onClick={() => setCurrentPage('pos')}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
                   >
                     <ShoppingCart className="w-5 h-5" />
-                    New Sale
+                    {cart.length > 0 ? 'Continue Sale' : 'New Sale'}
                   </button>
                 </div>
 
@@ -1462,7 +1477,7 @@ export default function PrintShopPOS() {
                   <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No orders found</p>
                   <button
-                    onClick={handleNewSale}
+                    onClick={() => setCurrentPage('pos')}
                     className="mt-4 text-indigo-600 hover:text-indigo-700 font-medium"
                   >
                     Create your first order
@@ -1801,7 +1816,7 @@ export default function PrintShopPOS() {
                 onClick={() => {
                   setSelectedCustomer(selectedCustomerDetails);
                   setSelectedCustomerDetails(null);
-                  handleNewSale(true);
+                  handleNewSale(true, true);
                 }}
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
