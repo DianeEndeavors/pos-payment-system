@@ -159,6 +159,7 @@ export default function PrintShopPOS() {
     unit: '',
     options: [{ option_name: '', price_adjustment: 0 }]
   });
+  const [productSearch, setProductSearch] = useState('');
 
   // Fetch dashboard stats
   useEffect(() => {
@@ -482,6 +483,28 @@ export default function PrintShopPOS() {
   const tax = subtotal * 0.08;
   const total = subtotal + tax;
 
+  // Search products across all categories
+  const getSearchResults = () => {
+    if (!productSearch || productSearch.length < 2) return [];
+
+    const query = productSearch.toLowerCase();
+    const results = [];
+
+    Object.entries(productCatalog).forEach(([categoryName, categoryData]) => {
+      categoryData.items.forEach(item => {
+        if (item.name.toLowerCase().includes(query)) {
+          results.push({
+            ...item,
+            categoryName,
+            categoryIcon: categoryData.icon
+          });
+        }
+      });
+    });
+
+    return results;
+  };
+
   // Checkout
   const handleProceedToCheckout = () => {
     if (cart.length === 0) {
@@ -801,71 +824,157 @@ export default function PrintShopPOS() {
             {/* Products Section */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg shadow">
-                {/* Category Tabs */}
-                <div className="border-b border-gray-200">
-                  <div className="flex overflow-x-auto">
-                    {Object.keys(productCatalog).map(category => {
-                      const Icon = productCatalog[category].icon;
-                      return (
-                        <button
-                          key={category}
-                          onClick={() => setSelectedCategory(category)}
-                          className={`px-6 py-4 font-medium text-sm whitespace-nowrap flex items-center gap-2 border-b-2 transition-colors ${
-                            selectedCategory === category
-                              ? 'border-indigo-600 text-indigo-600'
-                              : 'border-transparent text-gray-600 hover:text-gray-900'
-                          }`}
-                        >
-                          <Icon className="w-4 h-4" />
-                          {category}
-                        </button>
-                      );
-                    })}
+                {/* Product Search Bar */}
+                <div className="p-4 border-b border-gray-200">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Search products by name..."
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {productSearch && (
+                      <button
+                        onClick={() => setProductSearch('')}
+                        className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
+                {/* Category Tabs - Hidden when searching */}
+                {!productSearch && (
+                  <div className="border-b border-gray-200">
+                    <div className="flex overflow-x-auto">
+                      {Object.keys(productCatalog).map(category => {
+                        const Icon = productCatalog[category].icon;
+                        return (
+                          <button
+                            key={category}
+                            onClick={() => setSelectedCategory(category)}
+                            className={`px-6 py-4 font-medium text-sm whitespace-nowrap flex items-center gap-2 border-b-2 transition-colors ${
+                              selectedCategory === category
+                                ? 'border-indigo-600 text-indigo-600'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {category}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Products Grid */}
                 <div className="p-6">
-                  {productCatalog[selectedCategory] && productCatalog[selectedCategory].items ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {productCatalog[selectedCategory].items.map(item => (
-                        <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                              <p className="text-sm text-gray-500">{item.unit}</p>
-                            </div>
-                            <span className="text-lg font-bold text-indigo-600">
-                              {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
-                            </span>
-                          </div>
+                  {productSearch ? (
+                    // Search Results
+                    (() => {
+                      const searchResults = getSearchResults();
+                      return searchResults.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-sm text-gray-600 mb-4">
+                            Found {searchResults.length} product{searchResults.length !== 1 ? 's' : ''}
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {searchResults.map(item => {
+                              const Icon = item.categoryIcon;
+                              return (
+                                <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
+                                  <div className="flex justify-between items-start mb-3">
+                                    <div className="flex-1">
+                                      <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                                        <Icon className="w-3 h-3" />
+                                        <span>{item.categoryName}</span>
+                                        <span className="mx-1">•</span>
+                                        <span>{item.unit}</span>
+                                      </div>
+                                    </div>
+                                    <span className="text-lg font-bold text-indigo-600 ml-2">
+                                      {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
+                                    </span>
+                                  </div>
 
-                          <div className="space-y-2">
-                            {item.options.map((option, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => addToCart(item, option)}
-                                className="w-full px-4 py-2 bg-gray-50 hover:bg-indigo-50 text-gray-700 hover:text-indigo-600 rounded text-sm font-medium transition-colors flex items-center justify-between"
-                              >
-                                <span>
-                                  {option.name}
-                                  {option.priceAdjustment > 0 && (
-                                    <span className="ml-1 text-xs text-green-600">+${option.priceAdjustment.toFixed(2)}</span>
-                                  )}
-                                </span>
-                                <Plus className="w-4 h-4" />
-                              </button>
-                            ))}
+                                  <div className="space-y-2">
+                                    {item.options.map((option, idx) => (
+                                      <button
+                                        key={idx}
+                                        onClick={() => addToCart(item, option)}
+                                        className="w-full px-4 py-2 bg-gray-50 hover:bg-indigo-50 text-gray-700 hover:text-indigo-600 rounded text-sm font-medium transition-colors flex items-center justify-between"
+                                      >
+                                        <span>
+                                          {option.name}
+                                          {option.priceAdjustment > 0 && (
+                                            <span className="ml-1 text-xs text-green-600">+${option.priceAdjustment.toFixed(2)}</span>
+                                          )}
+                                        </span>
+                                        <Plus className="w-4 h-4" />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      ) : (
+                        <div className="text-center py-12 text-gray-500">
+                          <Search className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                          <p>No products found for "{productSearch}"</p>
+                          <p className="text-sm mt-2">Try a different search term</p>
+                        </div>
+                      );
+                    })()
                   ) : (
-                    <div className="text-center py-12 text-gray-500">
-                      <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>No products found</p>
-                      <p className="text-sm mt-2">Add products in Settings to get started</p>
-                    </div>
+                    // Category View
+                    productCatalog[selectedCategory] && productCatalog[selectedCategory].items ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {productCatalog[selectedCategory].items.map(item => (
+                          <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                                <p className="text-sm text-gray-500">{item.unit}</p>
+                              </div>
+                              <span className="text-lg font-bold text-indigo-600">
+                                {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {item.options.map((option, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => addToCart(item, option)}
+                                  className="w-full px-4 py-2 bg-gray-50 hover:bg-indigo-50 text-gray-700 hover:text-indigo-600 rounded text-sm font-medium transition-colors flex items-center justify-between"
+                                >
+                                  <span>
+                                    {option.name}
+                                    {option.priceAdjustment > 0 && (
+                                      <span className="ml-1 text-xs text-green-600">+${option.priceAdjustment.toFixed(2)}</span>
+                                    )}
+                                  </span>
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-gray-500">
+                        <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                        <p>No products found</p>
+                        <p className="text-sm mt-2">Add products in Settings to get started</p>
+                      </div>
+                    )
                   )}
                 </div>
               </div>
