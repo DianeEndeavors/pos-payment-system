@@ -39,46 +39,13 @@ const BACKEND_URL = process.env.NODE_ENV === 'development'
 
 const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
-// Product catalog for print shop
-const PRODUCT_CATALOG = {
-  'Business Cards': {
-    icon: Tag,
-    items: [
-      { id: 'bc-standard-500', name: 'Standard Business Cards', basePrice: 49.99, unit: '500 cards', options: ['Matte', 'Glossy', 'Uncoated'] },
-      { id: 'bc-standard-1000', name: 'Standard Business Cards', basePrice: 79.99, unit: '1000 cards', options: ['Matte', 'Glossy', 'Uncoated'] },
-      { id: 'bc-premium-500', name: 'Premium Business Cards', basePrice: 89.99, unit: '500 cards', options: ['Silk Laminate', 'Spot UV', 'Raised Foil'] },
-    ]
-  },
-  'Flyers': {
-    icon: FileText,
-    items: [
-      { id: 'fly-85x11-100', name: 'Flyers 8.5" x 11"', basePrice: 59.99, unit: '100 flyers', options: ['100lb Gloss', '80lb Matte', '100lb Cardstock'] },
-      { id: 'fly-85x11-500', name: 'Flyers 8.5" x 11"', basePrice: 149.99, unit: '500 flyers', options: ['100lb Gloss', '80lb Matte', '100lb Cardstock'] },
-      { id: 'fly-55x85-250', name: 'Half Sheet Flyers 5.5" x 8.5"', basePrice: 79.99, unit: '250 flyers', options: ['100lb Gloss', '80lb Matte'] },
-    ]
-  },
-  'Posters': {
-    icon: ImageIcon,
-    items: [
-      { id: 'post-18x24', name: 'Poster 18" x 24"', basePrice: 24.99, unit: 'per poster', options: ['Glossy Photo Paper', 'Matte', 'Canvas'] },
-      { id: 'post-24x36', name: 'Poster 24" x 36"', basePrice: 39.99, unit: 'per poster', options: ['Glossy Photo Paper', 'Matte', 'Canvas'] },
-      { id: 'post-36x48', name: 'Poster 36" x 48"', basePrice: 79.99, unit: 'per poster', options: ['Glossy Photo Paper', 'Matte', 'Canvas'] },
-    ]
-  },
-  'Banners': {
-    icon: Layers,
-    items: [
-      { id: 'ban-2x4', name: 'Banner 2\' x 4\'', basePrice: 49.99, unit: 'per banner', options: ['Vinyl 13oz', 'Mesh', 'Fabric'] },
-      { id: 'ban-3x6', name: 'Banner 3\' x 6\'', basePrice: 89.99, unit: 'per banner', options: ['Vinyl 13oz', 'Mesh', 'Fabric'] },
-      { id: 'ban-4x8', name: 'Banner 4\' x 8\'', basePrice: 149.99, unit: 'per banner', options: ['Vinyl 13oz', 'Mesh', 'Fabric'] },
-    ]
-  },
-  'Custom Order': {
-    icon: Package,
-    items: [
-      { id: 'custom', name: 'Custom Print Order', basePrice: 0, unit: 'custom pricing', options: ['Quote Required'] },
-    ]
-  }
+// Icon mapping for categories
+const ICON_MAP = {
+  'Tag': Tag,
+  'FileText': FileText,
+  'Image': ImageIcon,
+  'Layers': Layers,
+  'Package': Package
 };
 
 // Payment form component
@@ -180,6 +147,11 @@ export default function PrintShopPOS() {
   const [orderFilter, setOrderFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
 
+  // Products state
+  const [productCategories, setProductCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [productCatalog, setProductCatalog] = useState({});
+
   // Fetch dashboard stats
   useEffect(() => {
     if (currentPage === 'home') {
@@ -235,6 +207,77 @@ export default function PrintShopPOS() {
     }
   };
 
+  // Fetch products from database
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/products`);
+      const data = await response.json();
+
+      if (data.products) {
+        setProducts(data.products);
+
+        // Transform products into catalog format for POS UI
+        const catalog = {};
+
+        data.products.forEach(product => {
+          const categoryName = product.category.name;
+          const categoryIcon = ICON_MAP[product.category.icon] || Package;
+
+          if (!catalog[categoryName]) {
+            catalog[categoryName] = {
+              icon: categoryIcon,
+              items: []
+            };
+          }
+
+          // Get option names from product options
+          const options = product.options
+            .filter(opt => opt.active)
+            .sort((a, b) => a.display_order - b.display_order)
+            .map(opt => ({
+              name: opt.option_name,
+              priceAdjustment: parseFloat(opt.price_adjustment || 0)
+            }));
+
+          catalog[categoryName].items.push({
+            id: product.id,
+            name: product.name,
+            basePrice: parseFloat(product.base_price),
+            unit: product.unit,
+            options: options
+          });
+        });
+
+        setProductCatalog(catalog);
+
+        // Set initial selected category if not set
+        const categories = Object.keys(catalog);
+        if (categories.length > 0 && !selectedCategory) {
+          setSelectedCategory(categories[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
+  };
+
+  // Fetch product categories
+  const fetchProductCategories = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/product-categories`);
+      const data = await response.json();
+      setProductCategories(data.categories || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  // Load products on initial mount
+  useEffect(() => {
+    fetchProducts();
+    fetchProductCategories();
+  }, []);
+
   // Load data when pages change
   useEffect(() => {
     if (currentPage === 'customers') {
@@ -244,6 +287,9 @@ export default function PrintShopPOS() {
     } else if (currentPage === 'reports') {
       fetchAllCustomers();
       fetchAllOrders();
+    } else if (currentPage === 'settings') {
+      fetchProducts();
+      fetchProductCategories();
     }
   }, [currentPage]);
 
@@ -316,13 +362,16 @@ export default function PrintShopPOS() {
 
   // Cart functions
   const addToCart = (item, option) => {
+    // Calculate final price with option adjustment
+    const finalPrice = item.basePrice + (option.priceAdjustment || 0);
+
     const cartItem = {
-      id: `${item.id}-${option}-${Date.now()}`,
+      id: `${item.id}-${option.name}-${Date.now()}`,
       productId: item.id,
       name: item.name,
-      option: option,
+      option: option.name,
       unit: item.unit,
-      price: item.basePrice,
+      price: finalPrice,
       quantity: 1
     };
     setCart([...cart, cartItem]);
@@ -657,8 +706,8 @@ export default function PrintShopPOS() {
                 {/* Category Tabs */}
                 <div className="border-b border-gray-200">
                   <div className="flex overflow-x-auto">
-                    {Object.keys(PRODUCT_CATALOG).map(category => {
-                      const Icon = PRODUCT_CATALOG[category].icon;
+                    {Object.keys(productCatalog).map(category => {
+                      const Icon = productCatalog[category].icon;
                       return (
                         <button
                           key={category}
@@ -679,34 +728,47 @@ export default function PrintShopPOS() {
 
                 {/* Products Grid */}
                 <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {PRODUCT_CATALOG[selectedCategory].items.map(item => (
-                      <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                            <p className="text-sm text-gray-500">{item.unit}</p>
+                  {productCatalog[selectedCategory] && productCatalog[selectedCategory].items ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {productCatalog[selectedCategory].items.map(item => (
+                        <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                              <p className="text-sm text-gray-500">{item.unit}</p>
+                            </div>
+                            <span className="text-lg font-bold text-indigo-600">
+                              {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
+                            </span>
                           </div>
-                          <span className="text-lg font-bold text-indigo-600">
-                            {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
-                          </span>
-                        </div>
 
-                        <div className="space-y-2">
-                          {item.options.map(option => (
-                            <button
-                              key={option}
-                              onClick={() => addToCart(item, option)}
-                              className="w-full px-4 py-2 bg-gray-50 hover:bg-indigo-50 text-gray-700 hover:text-indigo-600 rounded text-sm font-medium transition-colors flex items-center justify-between"
-                            >
-                              <span>{option}</span>
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          ))}
+                          <div className="space-y-2">
+                            {item.options.map((option, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => addToCart(item, option)}
+                                className="w-full px-4 py-2 bg-gray-50 hover:bg-indigo-50 text-gray-700 hover:text-indigo-600 rounded text-sm font-medium transition-colors flex items-center justify-between"
+                              >
+                                <span>
+                                  {option.name}
+                                  {option.priceAdjustment > 0 && (
+                                    <span className="ml-1 text-xs text-green-600">+${option.priceAdjustment.toFixed(2)}</span>
+                                  )}
+                                </span>
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No products found</p>
+                      <p className="text-sm mt-2">Add products in Settings to get started</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1270,35 +1332,52 @@ export default function PrintShopPOS() {
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Product Catalog</h3>
-                  <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2">
+                  <button
+                    onClick={() => alert('Product management UI coming soon! For now, you can add products via the SQL editor in Supabase or by calling the API endpoints directly.')}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
+                  >
                     <Plus className="w-5 h-5" />
                     Add Product
                   </button>
                 </div>
 
-                <div className="space-y-3">
-                  {Object.entries(PRODUCT_CATALOG).map(([category, data]) => (
-                    <div key={category} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {React.createElement(data.icon, { className: 'w-5 h-5 text-indigo-600' })}
-                          <h4 className="font-semibold text-gray-900">{category}</h4>
-                        </div>
-                        <span className="text-sm text-gray-600">{data.items.length} items</span>
-                      </div>
-                      <div className="pl-7 space-y-1">
-                        {data.items.map(item => (
-                          <div key={item.id} className="flex items-center justify-between text-sm py-1">
-                            <span className="text-gray-700">{item.name} - {item.unit}</span>
-                            <span className="font-medium text-gray-900">
-                              {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
-                            </span>
+                {Object.keys(productCatalog).length > 0 ? (
+                  <div className="space-y-3">
+                    {Object.entries(productCatalog).map(([category, data]) => (
+                      <div key={category} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {React.createElement(data.icon, { className: 'w-5 h-5 text-indigo-600' })}
+                            <h4 className="font-semibold text-gray-900">{category}</h4>
                           </div>
-                        ))}
+                          <span className="text-sm text-gray-600">{data.items.length} items</span>
+                        </div>
+                        <div className="pl-7 space-y-1">
+                          {data.items.map(item => (
+                            <div key={item.id} className="flex items-center justify-between text-sm py-1">
+                              <span className="text-gray-700">{item.name} - {item.unit}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900">
+                                  {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  ({item.options.length} options)
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500 border border-gray-200 rounded-lg">
+                    <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No products found</p>
+                    <p className="text-sm mt-2">Run the products schema SQL to populate your catalog</p>
+                    <p className="text-xs mt-1 text-gray-400">See SETUP_PRODUCTS.md for instructions</p>
+                  </div>
+                )}
               </div>
 
               {/* System Info */}

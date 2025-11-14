@@ -153,15 +153,20 @@ app.post('/customers', async (req, res) => {
       return res.status(400).json({ error: 'Name and email are required' });
     }
 
-    // Check if customer already exists
-    const { data: existingCustomer } = await supabase
+    // Check if customer already exists (don't use .single() as it throws error when not found)
+    const { data: existingCustomers, error: checkError } = await supabase
       .from('customers')
       .select('*')
       .eq('email', email)
-      .single();
+      .limit(1);
 
-    if (existingCustomer) {
-      return res.json({ customer: existingCustomer, existing: true });
+    if (checkError) {
+      console.error('Error checking existing customer:', checkError);
+      throw checkError;
+    }
+
+    if (existingCustomers && existingCustomers.length > 0) {
+      return res.json({ customer: existingCustomers[0], existing: true });
     }
 
     // Create new customer
@@ -171,7 +176,10 @@ app.post('/customers', async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error inserting customer:', error);
+      throw error;
+    }
 
     res.json({ customer: data, existing: false });
   } catch (error) {
@@ -352,6 +360,238 @@ app.get('/orders', async (req, res) => {
   } catch (error) {
     console.error('Error fetching orders:', error);
     res.status(500).json({ error: error.message || 'Failed to fetch orders' });
+  }
+});
+
+// ===== PRODUCT MANAGEMENT ENDPOINTS =====
+
+// Get all product categories
+app.get('/product-categories', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('product_categories')
+      .select('*')
+      .eq('active', true)
+      .order('display_order', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ categories: data || [] });
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch categories' });
+  }
+});
+
+// Get all products with their options and category info
+app.get('/products', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        category:product_categories (
+          id,
+          name,
+          icon
+        ),
+        options:product_options (*)
+      `)
+      .eq('active', true)
+      .order('display_order', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ products: data || [] });
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch products' });
+  }
+});
+
+// Get products by category
+app.get('/products/category/:categoryId', async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+
+    const { data, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        options:product_options (*)
+      `)
+      .eq('category_id', categoryId)
+      .eq('active', true)
+      .order('display_order', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ products: data || [] });
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch products' });
+  }
+});
+
+// Create new product
+app.post('/products', async (req, res) => {
+  try {
+    const { category_id, name, base_price, unit, options } = req.body;
+
+    if (!category_id || !name || base_price === undefined || !unit) {
+      return res.status(400).json({ error: 'Category, name, base price, and unit are required' });
+    }
+
+    // Create product
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .insert([{ category_id, name, base_price, unit }])
+      .select()
+      .single();
+
+    if (productError) throw productError;
+
+    // Create options if provided
+    if (options && options.length > 0) {
+      const optionsToInsert = options.map((opt, index) => ({
+        product_id: product.id,
+        option_name: opt.option_name,
+        price_adjustment: opt.price_adjustment || 0,
+        display_order: index
+      }));
+
+      const { error: optionsError } = await supabase
+        .from('product_options')
+        .insert(optionsToInsert);
+
+      if (optionsError) throw optionsError;
+    }
+
+    res.json({ product });
+  } catch (error) {
+    console.error('Error creating product:', error);
+    res.status(500).json({ error: error.message || 'Failed to create product' });
+  }
+});
+
+// Update product
+app.put('/products/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, base_price, unit, active } = req.body;
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (base_price !== undefined) updateData.base_price = base_price;
+    if (unit !== undefined) updateData.unit = unit;
+    if (active !== undefined) updateData.active = active;
+
+    const { data, error } = await supabase
+      .from('products')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ product: data });
+  } catch (error) {
+    console.error('Error updating product:', error);
+    res.status(500).json({ error: error.message || 'Failed to update product' });
+  }
+});
+
+// Delete product (soft delete by setting active = false)
+app.delete('/products/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('products')
+      .update({ active: false })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ product: data });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete product' });
+  }
+});
+
+// Create product option
+app.post('/product-options', async (req, res) => {
+  try {
+    const { product_id, option_name, price_adjustment } = req.body;
+
+    if (!product_id || !option_name) {
+      return res.status(400).json({ error: 'Product ID and option name are required' });
+    }
+
+    const { data, error } = await supabase
+      .from('product_options')
+      .insert([{ product_id, option_name, price_adjustment: price_adjustment || 0 }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ option: data });
+  } catch (error) {
+    console.error('Error creating option:', error);
+    res.status(500).json({ error: error.message || 'Failed to create option' });
+  }
+});
+
+// Update product option
+app.put('/product-options/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { option_name, price_adjustment, active } = req.body;
+
+    const updateData = {};
+    if (option_name !== undefined) updateData.option_name = option_name;
+    if (price_adjustment !== undefined) updateData.price_adjustment = price_adjustment;
+    if (active !== undefined) updateData.active = active;
+
+    const { data, error } = await supabase
+      .from('product_options')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ option: data });
+  } catch (error) {
+    console.error('Error updating option:', error);
+    res.status(500).json({ error: error.message || 'Failed to update option' });
+  }
+});
+
+// Delete product option
+app.delete('/product-options/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('product_options')
+      .update({ active: false })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ option: data });
+  } catch (error) {
+    console.error('Error deleting option:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete option' });
   }
 });
 
