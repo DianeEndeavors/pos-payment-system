@@ -8,7 +8,7 @@ const STRIPE_PUBLISHABLE_KEY = 'pk_test_51STOuE5sITCiG5Ocs367wlaxjNXFKBCV3G4uFT4
 // For local development
 const BACKEND_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:3001'
-  : 'https://pos-payment-backend.vercel.app'; // Update this after deployment
+  : 'https://pos-payment-system.vercel.app'; // Backend URL
 
 const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 

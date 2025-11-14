@@ -11,7 +11,14 @@ const app = express();
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+  origin: [
+    'http://localhost:5173',
+    'https://pos-payment-system-q4vp.vercel.app'
+  ],
+  credentials: true
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Health check endpoint
