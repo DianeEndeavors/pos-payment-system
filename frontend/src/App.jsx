@@ -1,18 +1,74 @@
-import React, { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  ShoppingCart,
+  Trash2,
+  Plus,
+  Minus,
+  CreditCard,
+  X,
+  Package,
+  FileText,
+  Image as ImageIcon,
+  Layers,
+  Tag,
+  AlertCircle,
+  CheckCircle,
+  Loader
+} from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 const STRIPE_PUBLISHABLE_KEY = 'pk_test_51STOuE5sITCiG5Ocs367wlaxjNXFKBCV3G4uFT4VQo4hPlTiLCtTunGfIIxGm3XBv9Rxv584U9K3yz9w7DgL8Mvm009Ngi8z6c';
 
-// For local development
 const BACKEND_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:3001'
-  : 'https://pos-payment-system.vercel.app'; // Backend URL
+  : 'https://pos-payment-system.vercel.app';
 
 const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
-// Payment form component (inside Stripe Elements provider)
+// Product catalog for print shop
+const PRODUCT_CATALOG = {
+  'Business Cards': {
+    icon: Tag,
+    items: [
+      { id: 'bc-standard-500', name: 'Standard Business Cards', basePrice: 49.99, unit: '500 cards', options: ['Matte', 'Glossy', 'Uncoated'] },
+      { id: 'bc-standard-1000', name: 'Standard Business Cards', basePrice: 79.99, unit: '1000 cards', options: ['Matte', 'Glossy', 'Uncoated'] },
+      { id: 'bc-premium-500', name: 'Premium Business Cards', basePrice: 89.99, unit: '500 cards', options: ['Silk Laminate', 'Spot UV', 'Raised Foil'] },
+    ]
+  },
+  'Flyers': {
+    icon: FileText,
+    items: [
+      { id: 'fly-85x11-100', name: 'Flyers 8.5" x 11"', basePrice: 59.99, unit: '100 flyers', options: ['100lb Gloss', '80lb Matte', '100lb Cardstock'] },
+      { id: 'fly-85x11-500', name: 'Flyers 8.5" x 11"', basePrice: 149.99, unit: '500 flyers', options: ['100lb Gloss', '80lb Matte', '100lb Cardstock'] },
+      { id: 'fly-55x85-250', name: 'Half Sheet Flyers 5.5" x 8.5"', basePrice: 79.99, unit: '250 flyers', options: ['100lb Gloss', '80lb Matte'] },
+    ]
+  },
+  'Posters': {
+    icon: ImageIcon,
+    items: [
+      { id: 'post-18x24', name: 'Poster 18" x 24"', basePrice: 24.99, unit: 'per poster', options: ['Glossy Photo Paper', 'Matte', 'Canvas'] },
+      { id: 'post-24x36', name: 'Poster 24" x 36"', basePrice: 39.99, unit: 'per poster', options: ['Glossy Photo Paper', 'Matte', 'Canvas'] },
+      { id: 'post-36x48', name: 'Poster 36" x 48"', basePrice: 79.99, unit: 'per poster', options: ['Glossy Photo Paper', 'Matte', 'Canvas'] },
+    ]
+  },
+  'Banners': {
+    icon: Layers,
+    items: [
+      { id: 'ban-2x4', name: 'Banner 2\' x 4\'', basePrice: 49.99, unit: 'per banner', options: ['Vinyl 13oz', 'Mesh', 'Fabric'] },
+      { id: 'ban-3x6', name: 'Banner 3\' x 6\'', basePrice: 89.99, unit: 'per banner', options: ['Vinyl 13oz', 'Mesh', 'Fabric'] },
+      { id: 'ban-4x8', name: 'Banner 4\' x 8\'', basePrice: 149.99, unit: 'per banner', options: ['Vinyl 13oz', 'Mesh', 'Fabric'] },
+    ]
+  },
+  'Custom Order': {
+    icon: Package,
+    items: [
+      { id: 'custom', name: 'Custom Print Order', basePrice: 0, unit: 'custom pricing', options: ['Quote Required'] },
+    ]
+  }
+};
+
+// Payment form component
 function PaymentForm({ clientSecret, onSuccess }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -70,144 +126,151 @@ function PaymentForm({ clientSecret, onSuccess }) {
         {isSubmitting ? (
           <>
             <Loader className="w-5 h-5 animate-spin" />
-            Processing...
+            Processing Payment...
           </>
         ) : (
-          'Complete Payment'
+          <>
+            <CreditCard className="w-5 h-5" />
+            Complete Payment
+          </>
         )}
       </button>
     </form>
   );
 }
 
-// Main POS app component
-export default function POSPaymentApp() {
-  const [step, setStep] = useState('form'); // 'form' or 'payment'
-  const [formData, setFormData] = useState({
-    customerName: '',
-    customerEmail: '',
-    amount: ''
-  });
-  const [formErrors, setFormErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+// Main POS Application
+export default function PrintShopPOS() {
+  const [cart, setCart] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('Business Cards');
+  const [customerInfo, setCustomerInfo] = useState({ name: '', email: '', phone: '' });
+  const [orderNotes, setOrderNotes] = useState('');
+  const [step, setStep] = useState('pos'); // 'pos', 'checkout', 'payment'
   const [clientSecret, setClientSecret] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(null);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    if (formErrors[name]) {
-      setFormErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
-    }
+  // Add item to cart
+  const addToCart = (item, option) => {
+    const cartItem = {
+      id: `${item.id}-${option}-${Date.now()}`,
+      productId: item.id,
+      name: item.name,
+      option: option,
+      unit: item.unit,
+      price: item.basePrice,
+      quantity: 1
+    };
+    setCart([...cart, cartItem]);
   };
 
-  const validateForm = () => {
-    const errors = {};
-
-    if (!formData.customerName.trim()) {
-      errors.customerName = 'Customer name is required';
-    }
-
-    if (!formData.customerEmail.trim()) {
-      errors.customerEmail = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail)) {
-      errors.customerEmail = 'Please enter a valid email';
-    }
-
-    if (!formData.amount) {
-      errors.amount = 'Amount is required';
-    } else if (isNaN(formData.amount) || parseFloat(formData.amount) <= 0) {
-      errors.amount = 'Please enter a valid amount';
-    }
-
-    return errors;
+  // Update quantity
+  const updateQuantity = (cartItemId, delta) => {
+    setCart(cart.map(item =>
+      item.id === cartItemId
+        ? { ...item, quantity: Math.max(1, item.quantity + delta) }
+        : item
+    ));
   };
 
-  const handleFormSubmit = async (e) => {
-    e.preventDefault();
+  // Remove from cart
+  const removeFromCart = (cartItemId) => {
+    setCart(cart.filter(item => item.id !== cartItemId));
+  };
 
-    const errors = validateForm();
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
+  // Calculate totals
+  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const tax = subtotal * 0.08; // 8% tax
+  const total = subtotal + tax;
+
+  // Proceed to checkout
+  const handleProceedToCheckout = () => {
+    if (cart.length === 0) {
+      alert('Please add items to cart');
+      return;
+    }
+    setStep('checkout');
+  };
+
+  // Submit order and create payment intent
+  const handleSubmitOrder = async () => {
+    if (!customerInfo.name || !customerInfo.email) {
+      alert('Please enter customer name and email');
       return;
     }
 
-    setIsSubmitting(true);
+    setIsProcessing(true);
     setPaymentStatus(null);
 
     try {
-      // Call backend to create Payment Intent
       const response = await fetch(`${BACKEND_URL}/create-payment-intent`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: parseFloat(formData.amount),
-          customerName: formData.customerName,
-          customerEmail: formData.customerEmail
+          amount: total,
+          customerName: customerInfo.name,
+          customerEmail: customerInfo.email
         })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to create payment intent');
-      }
+      if (!response.ok) throw new Error('Failed to create payment intent');
 
       const data = await response.json();
       setClientSecret(data.clientSecret);
       setStep('payment');
-
     } catch (error) {
       setPaymentStatus({
         type: 'error',
-        message: error.message || 'Failed to initialize payment. Please try again.'
+        message: error.message || 'Failed to initialize payment'
       });
     } finally {
-      setIsSubmitting(false);
+      setIsProcessing(false);
     }
   };
 
+  // Payment success
   const handlePaymentSuccess = (paymentIntent) => {
     setPaymentStatus({
       type: 'success',
-      message: `Payment successful! Amount: $${(paymentIntent.amount / 100).toFixed(2)}`
+      message: `Payment successful! Order total: $${(paymentIntent.amount / 100).toFixed(2)}`
     });
 
     setTimeout(() => {
-      setStep('form');
-      setFormData({
-        customerName: '',
-        customerEmail: '',
-        amount: ''
-      });
+      // Reset everything
+      setCart([]);
+      setCustomerInfo({ name: '', email: '', phone: '' });
+      setOrderNotes('');
+      setStep('pos');
       setClientSecret(null);
       setPaymentStatus(null);
     }, 3000);
   };
 
-  const formattedAmount = formData.amount ? `$${parseFloat(formData.amount).toFixed(2)}` : '$0.00';
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 md:p-8">
+    <div className="min-h-screen bg-gray-100">
 
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Payment Processing</h1>
-          <p className="text-gray-600">
-            {step === 'form' ? 'Enter customer details' : 'Enter payment information'}
-          </p>
+      {/* Header */}
+      <header className="bg-indigo-600 text-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Print Shop POS</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-indigo-100">Employee Terminal</span>
+            <div className="relative">
+              <ShoppingCart className="w-6 h-6" />
+              {cart.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {cart.length}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
+      </header>
 
-        {/* Status Messages */}
-        {paymentStatus && (
-          <div className={`mb-6 p-4 rounded-lg flex items-start gap-3 ${
+      {/* Status Messages */}
+      {paymentStatus && (
+        <div className={`max-w-7xl mx-auto mt-4 px-4`}>
+          <div className={`p-4 rounded-lg flex items-start gap-3 ${
             paymentStatus.type === 'success'
               ? 'bg-green-50 border border-green-200'
               : 'bg-red-50 border border-red-200'
@@ -221,129 +284,305 @@ export default function POSPaymentApp() {
               {paymentStatus.message}
             </p>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Form Step */}
-        {step === 'form' && (
-          <form onSubmit={handleFormSubmit} className="space-y-5">
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto p-4">
 
-            {/* Customer Name */}
-            <div>
-              <label htmlFor="customerName" className="block text-sm font-medium text-gray-700 mb-2">
-                Customer Name
-              </label>
-              <input
-                type="text"
-                id="customerName"
-                name="customerName"
-                value={formData.customerName}
-                onChange={handleInputChange}
-                placeholder="John Doe"
-                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  formErrors.customerName
-                    ? 'border-red-500 bg-red-50'
-                    : 'border-gray-300'
-                }`}
-                disabled={isSubmitting}
-              />
-              {formErrors.customerName && (
-                <p className="text-red-600 text-sm mt-1">{formErrors.customerName}</p>
-              )}
-            </div>
+        {/* POS View */}
+        {step === 'pos' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-            {/* Customer Email */}
-            <div>
-              <label htmlFor="customerEmail" className="block text-sm font-medium text-gray-700 mb-2">
-                Customer Email
-              </label>
-              <input
-                type="email"
-                id="customerEmail"
-                name="customerEmail"
-                value={formData.customerEmail}
-                onChange={handleInputChange}
-                placeholder="john@example.com"
-                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  formErrors.customerEmail
-                    ? 'border-red-500 bg-red-50'
-                    : 'border-gray-300'
-                }`}
-                disabled={isSubmitting}
-              />
-              {formErrors.customerEmail && (
-                <p className="text-red-600 text-sm mt-1">{formErrors.customerEmail}</p>
-              )}
-            </div>
+            {/* Products Section */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-lg shadow">
 
-            {/* Amount */}
-            <div>
-              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-2">
-                Amount
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-2 text-gray-500 font-semibold">$</span>
-                <input
-                  type="number"
-                  id="amount"
-                  name="amount"
-                  value={formData.amount}
-                  onChange={handleInputChange}
-                  placeholder="0.00"
-                  step="0.01"
-                  min="0"
-                  className={`w-full pl-8 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    formErrors.amount
-                      ? 'border-red-500 bg-red-50'
-                      : 'border-gray-300'
-                  }`}
-                  disabled={isSubmitting}
-                />
+                {/* Category Tabs */}
+                <div className="border-b border-gray-200">
+                  <div className="flex overflow-x-auto">
+                    {Object.keys(PRODUCT_CATALOG).map(category => {
+                      const Icon = PRODUCT_CATALOG[category].icon;
+                      return (
+                        <button
+                          key={category}
+                          onClick={() => setSelectedCategory(category)}
+                          className={`px-6 py-4 font-medium text-sm whitespace-nowrap flex items-center gap-2 border-b-2 transition-colors ${
+                            selectedCategory === category
+                              ? 'border-indigo-600 text-indigo-600'
+                              : 'border-transparent text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          {category}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Products Grid */}
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {PRODUCT_CATALOG[selectedCategory].items.map(item => (
+                      <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                            <p className="text-sm text-gray-500">{item.unit}</p>
+                          </div>
+                          <span className="text-lg font-bold text-indigo-600">
+                            {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          {item.options.map(option => (
+                            <button
+                              key={option}
+                              onClick={() => addToCart(item, option)}
+                              className="w-full px-4 py-2 bg-gray-50 hover:bg-indigo-50 text-gray-700 hover:text-indigo-600 rounded text-sm font-medium transition-colors flex items-center justify-between"
+                            >
+                              <span>{option}</span>
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              {formErrors.amount && (
-                <p className="text-red-600 text-sm mt-1">{formErrors.amount}</p>
-              )}
             </div>
 
-            {/* Amount Display */}
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Total Amount</p>
-              <p className="text-3xl font-bold text-indigo-600">{formattedAmount}</p>
-            </div>
+            {/* Cart Section */}
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-lg shadow sticky top-4">
+                <div className="p-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5" />
+                    Current Order
+                  </h2>
+                </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader className="w-5 h-5 animate-spin" />
-                  Initializing Payment...
-                </>
-              ) : (
-                'Proceed to Payment'
-              )}
-            </button>
-          </form>
+                <div className="p-4">
+                  {cart.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>Cart is empty</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {cart.map(item => (
+                        <div key={item.id} className="bg-gray-50 rounded-lg p-3">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1">
+                              <p className="font-medium text-sm text-gray-900">{item.name}</p>
+                              <p className="text-xs text-gray-500">{item.option}</p>
+                            </div>
+                            <button
+                              onClick={() => removeFromCart(item.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => updateQuantity(item.id, -1)}
+                                className="p-1 bg-white rounded hover:bg-gray-100"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="w-8 text-center font-medium">{item.quantity}</span>
+                              <button
+                                onClick={() => updateQuantity(item.id, 1)}
+                                className="p-1 bg-white rounded hover:bg-gray-100"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <span className="font-semibold text-indigo-600">
+                              ${(item.price * item.quantity).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {cart.length > 0 && (
+                  <>
+                    <div className="px-4 py-3 border-t border-gray-200 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal</span>
+                        <span className="font-medium">${subtotal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Tax (8%)</span>
+                        <span className="font-medium">${tax.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-300">
+                        <span>Total</span>
+                        <span className="text-indigo-600">${total.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 border-t border-gray-200">
+                      <button
+                        onClick={handleProceedToCheckout}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <CreditCard className="w-5 h-5" />
+                        Proceed to Checkout
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
-        {/* Payment Step */}
-        {step === 'payment' && clientSecret && (
-          <div>
-            <Elements stripe={stripePromise} options={{ clientSecret }}>
-              <PaymentForm clientSecret={clientSecret} onSuccess={handlePaymentSuccess} />
-            </Elements>
+        {/* Checkout View */}
+        {step === 'checkout' && (
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Customer Information</h2>
+                <button
+                  onClick={() => setStep('pos')}
+                  className="text-gray-600 hover:text-gray-900"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
 
-            <button
-              onClick={() => {
-                setStep('form');
-                setClientSecret(null);
-              }}
-              className="w-full mt-4 text-indigo-600 hover:text-indigo-700 font-semibold py-2"
-            >
-              Back to Details
-            </button>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Customer Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={customerInfo.name}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="John Doe"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    value={customerInfo.email}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="john@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerInfo.phone}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Order Notes
+                  </label>
+                  <textarea
+                    value={orderNotes}
+                    onChange={(e) => setOrderNotes(e.target.value)}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Special instructions, rush order, etc."
+                  />
+                </div>
+
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Order Total</span>
+                    <span className="text-2xl font-bold text-indigo-600">${total.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setStep('pos')}
+                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Back to Cart
+                  </button>
+                  <button
+                    onClick={handleSubmitOrder}
+                    disabled={isProcessing}
+                    className="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader className="w-5 h-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="w-5 h-5" />
+                        Proceed to Payment
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment View */}
+        {step === 'payment' && clientSecret && (
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Payment</h2>
+                <button
+                  onClick={() => {
+                    setStep('checkout');
+                    setClientSecret(null);
+                  }}
+                  className="text-gray-600 hover:text-gray-900"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-700">Customer:</span>
+                  <span className="font-medium">{customerInfo.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-700">Amount Due:</span>
+                  <span className="text-xl font-bold text-indigo-600">${total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <Elements stripe={stripePromise} options={{ clientSecret }}>
+                <PaymentForm clientSecret={clientSecret} onSuccess={handlePaymentSuccess} />
+              </Elements>
+            </div>
           </div>
         )}
 
