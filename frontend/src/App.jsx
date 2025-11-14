@@ -327,11 +327,13 @@ export default function PrintShopPOS() {
   }, [customerSearch]);
 
   // Handle new sale
-  const handleNewSale = () => {
+  const handleNewSale = (preserveCustomer = false) => {
     setCurrentPage('pos');
     setStep('pos');
     setCart([]);
-    setSelectedCustomer(null);
+    if (!preserveCustomer) {
+      setSelectedCustomer(null);
+    }
     setCustomerSearch('');
     setOrderNotes('');
   };
@@ -1167,7 +1169,7 @@ export default function PrintShopPOS() {
                               <button
                                 onClick={() => {
                                   setSelectedCustomer(customer);
-                                  handleNewSale();
+                                  handleNewSale(true);
                                 }}
                                 className="text-green-600 hover:text-green-700 p-1"
                                 title="New Sale"
@@ -1631,7 +1633,7 @@ export default function PrintShopPOS() {
                 onClick={() => {
                   setSelectedCustomer(selectedCustomerDetails);
                   setSelectedCustomerDetails(null);
-                  handleNewSale();
+                  handleNewSale(true);
                 }}
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
