@@ -398,6 +398,44 @@ app.get('/product-categories', async (req, res) => {
   }
 });
 
+// Create product category
+app.post('/product-categories', async (req, res) => {
+  try {
+    const { name, icon, display_order } = req.body;
+
+    if (!name || !icon) {
+      return res.status(400).json({ error: 'Name and icon are required' });
+    }
+
+    // Check if category already exists
+    const { data: existing, error: checkError } = await supabase
+      .from('product_categories')
+      .select('*')
+      .eq('name', name)
+      .limit(1);
+
+    if (checkError) throw checkError;
+
+    if (existing && existing.length > 0) {
+      return res.json({ category: existing[0], existing: true });
+    }
+
+    // Create new category
+    const { data, error } = await supabase
+      .from('product_categories')
+      .insert([{ name, icon, display_order: display_order || 0 }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ category: data, existing: false });
+  } catch (error) {
+    console.error('Error creating category:', error);
+    res.status(500).json({ error: error.message || 'Failed to create category' });
+  }
+});
+
 // Get all products with their options and category info
 app.get('/products', async (req, res) => {
   try {
