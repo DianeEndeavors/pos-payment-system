@@ -988,8 +988,67 @@ export default function PrintShopPOS() {
                     <ShoppingCart className="w-5 h-5" />
                     Current Order
                   </h2>
-                  {selectedCustomer && (
-                    <p className="text-sm text-gray-600 mt-1">For: {selectedCustomer.name}</p>
+                  {selectedCustomer ? (
+                    <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-indigo-900">{selectedCustomer.name}</p>
+                        <p className="text-xs text-indigo-700">{selectedCustomer.email}</p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedCustomer(null)}
+                        className="text-indigo-600 hover:text-indigo-700"
+                        title="Change customer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={customerSearch}
+                          onChange={(e) => setCustomerSearch(e.target.value)}
+                          placeholder="Search customer..."
+                          className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Customer Search Results */}
+                      {(searchResults.length > 0 || (customerSearch.length >= 2 && !isSearching && searchResults.length === 0)) && (
+                        <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-60 overflow-y-auto">
+                          {searchResults.length > 0 ? (
+                            searchResults.map(customer => (
+                              <button
+                                key={customer.id}
+                                onClick={() => handleSelectCustomer(customer)}
+                                className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                              >
+                                <p className="font-medium text-sm text-gray-900">{customer.name}</p>
+                                <p className="text-xs text-gray-600">{customer.email}</p>
+                              </button>
+                            ))
+                          ) : (
+                            <button
+                              onClick={() => setShowNewCustomerForm(true)}
+                              className="w-full px-3 py-2 text-left hover:bg-indigo-50 flex items-center gap-2 text-indigo-600"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                              <span className="text-sm">Add new customer</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => setShowNewCustomerForm(true)}
+                        className="mt-2 w-full px-3 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        New Customer
+                      </button>
+                    </div>
                   )}
                 </div>
 
