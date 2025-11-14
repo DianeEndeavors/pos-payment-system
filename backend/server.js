@@ -324,6 +324,37 @@ app.get('/dashboard/stats', async (req, res) => {
   }
 });
 
+// Get all orders with customer info
+app.get('/orders', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        customer:customers (
+          id,
+          name,
+          email
+        ),
+        order_items (*)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Format the response to include customer_name
+    const formattedOrders = data.map(order => ({
+      ...order,
+      customer_name: order.customer?.name || 'Unknown'
+    }));
+
+    res.json({ orders: formattedOrders || [] });
+  } catch (error) {
+    console.error('Error fetching orders:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch orders' });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
