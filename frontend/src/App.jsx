@@ -295,7 +295,7 @@ export default function PrintShopPOS() {
     } else if (currentPage === 'reports') {
       fetchAllCustomers();
       fetchAllOrders();
-    } else if (currentPage === 'settings') {
+    } else if (currentPage === 'catalogue') {
       fetchProducts();
       fetchProductCategories();
     }
@@ -632,6 +632,15 @@ export default function PrintShopPOS() {
             >
               <BarChart3 className="w-4 h-4" />
               Reports
+            </button>
+            <button
+              onClick={() => setCurrentPage('catalogue')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+                currentPage === 'catalogue' ? 'bg-indigo-700' : 'bg-indigo-500 hover:bg-indigo-600'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              Catalogue
             </button>
             <button
               onClick={() => setCurrentPage('settings')}
@@ -1385,6 +1394,62 @@ export default function PrintShopPOS() {
           </div>
         )}
 
+        {/* CATALOGUE PAGE */}
+        {currentPage === 'catalogue' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Product Catalogue</h2>
+                <button
+                  onClick={() => setShowProductForm(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Add Product
+                </button>
+              </div>
+
+              {Object.keys(productCatalog).length > 0 ? (
+                <div className="space-y-3">
+                  {Object.entries(productCatalog).map(([category, data]) => (
+                    <div key={category} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {React.createElement(data.icon, { className: 'w-5 h-5 text-indigo-600' })}
+                          <h4 className="font-semibold text-gray-900">{category}</h4>
+                        </div>
+                        <span className="text-sm text-gray-600">{data.items.length} items</span>
+                      </div>
+                      <div className="pl-7 space-y-1">
+                        {data.items.map(item => (
+                          <div key={item.id} className="flex items-center justify-between text-sm py-1">
+                            <span className="text-gray-700">{item.name} - {item.unit}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-gray-900">
+                                {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                ({item.options.length} options)
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500 border border-gray-200 rounded-lg">
+                  <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No products found</p>
+                  <p className="text-sm mt-2">Run the products schema SQL to populate your catalog</p>
+                  <p className="text-xs mt-1 text-gray-400">See SETUP_PRODUCTS.md for instructions</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* SETTINGS PAGE */}
         {currentPage === 'settings' && (
           <div className="space-y-6">
@@ -1413,58 +1478,6 @@ export default function PrintShopPOS() {
                     />
                   </div>
                 </div>
-              </div>
-
-              {/* Product Catalog */}
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Product Catalog</h3>
-                  <button
-                    onClick={() => setShowProductForm(true)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
-                  >
-                    <Plus className="w-5 h-5" />
-                    Add Product
-                  </button>
-                </div>
-
-                {Object.keys(productCatalog).length > 0 ? (
-                  <div className="space-y-3">
-                    {Object.entries(productCatalog).map(([category, data]) => (
-                      <div key={category} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            {React.createElement(data.icon, { className: 'w-5 h-5 text-indigo-600' })}
-                            <h4 className="font-semibold text-gray-900">{category}</h4>
-                          </div>
-                          <span className="text-sm text-gray-600">{data.items.length} items</span>
-                        </div>
-                        <div className="pl-7 space-y-1">
-                          {data.items.map(item => (
-                            <div key={item.id} className="flex items-center justify-between text-sm py-1">
-                              <span className="text-gray-700">{item.name} - {item.unit}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-gray-900">
-                                  {item.basePrice === 0 ? 'Quote' : `$${item.basePrice.toFixed(2)}`}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  ({item.options.length} options)
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-gray-500 border border-gray-200 rounded-lg">
-                    <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No products found</p>
-                    <p className="text-sm mt-2">Run the products schema SQL to populate your catalog</p>
-                    <p className="text-xs mt-1 text-gray-400">See SETUP_PRODUCTS.md for instructions</p>
-                  </div>
-                )}
               </div>
 
               {/* System Info */}
