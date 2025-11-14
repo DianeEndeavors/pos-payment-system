@@ -151,6 +151,14 @@ export default function PrintShopPOS() {
   const [productCategories, setProductCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [productCatalog, setProductCatalog] = useState({});
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [newProductData, setNewProductData] = useState({
+    category_id: '',
+    name: '',
+    base_price: '',
+    unit: '',
+    options: [{ option_name: '', price_adjustment: 0 }]
+  });
 
   // Fetch dashboard stats
   useEffect(() => {
@@ -354,10 +362,89 @@ export default function PrintShopPOS() {
       setShowNewCustomerForm(false);
       setNewCustomerData({ name: '', email: '', phone: '' });
       setCustomerSearch('');
+      fetchAllCustomers(); // Refresh customer list
     } catch (error) {
       console.error('Error creating customer:', error);
       alert('Failed to create customer');
     }
+  };
+
+  // Create new product
+  const handleCreateProduct = async () => {
+    if (!newProductData.category_id || !newProductData.name || !newProductData.base_price || !newProductData.unit) {
+      alert('Please fill in all required fields (Category, Name, Price, Unit)');
+      return;
+    }
+
+    // Validate that at least one option has a name
+    const validOptions = newProductData.options.filter(opt => opt.option_name.trim() !== '');
+    if (validOptions.length === 0) {
+      alert('Please add at least one product option');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newProductData,
+          base_price: parseFloat(newProductData.base_price),
+          options: validOptions.map(opt => ({
+            option_name: opt.option_name,
+            price_adjustment: parseFloat(opt.price_adjustment || 0)
+          }))
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create product');
+      }
+
+      const data = await response.json();
+      setShowProductForm(false);
+      setNewProductData({
+        category_id: '',
+        name: '',
+        base_price: '',
+        unit: '',
+        options: [{ option_name: '', price_adjustment: 0 }]
+      });
+
+      // Refresh products
+      fetchProducts();
+      alert('Product created successfully!');
+    } catch (error) {
+      console.error('Error creating product:', error);
+      alert('Failed to create product: ' + error.message);
+    }
+  };
+
+  // Add option to product form
+  const handleAddOption = () => {
+    setNewProductData({
+      ...newProductData,
+      options: [...newProductData.options, { option_name: '', price_adjustment: 0 }]
+    });
+  };
+
+  // Remove option from product form
+  const handleRemoveOption = (index) => {
+    const updatedOptions = newProductData.options.filter((_, i) => i !== index);
+    setNewProductData({
+      ...newProductData,
+      options: updatedOptions.length > 0 ? updatedOptions : [{ option_name: '', price_adjustment: 0 }]
+    });
+  };
+
+  // Update option in product form
+  const handleUpdateOption = (index, field, value) => {
+    const updatedOptions = [...newProductData.options];
+    updatedOptions[index][field] = value;
+    setNewProductData({
+      ...newProductData,
+      options: updatedOptions
+    });
   };
 
   // Cart functions
@@ -1333,7 +1420,7 @@ export default function PrintShopPOS() {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Product Catalog</h3>
                   <button
-                    onClick={() => alert('Product management UI coming soon! For now, you can add products via the SQL editor in Supabase or by calling the API endpoints directly.')}
+                    onClick={() => setShowProductForm(true)}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
                   >
                     <Plus className="w-5 h-5" />
@@ -1628,6 +1715,165 @@ export default function PrintShopPOS() {
                   <span>Total</span>
                   <span className="text-indigo-600">${parseFloat(selectedOrder.total).toFixed(2)}</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Form Modal */}
+      {showProductForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Add New Product</h2>
+              <button
+                onClick={() => {
+                  setShowProductForm(false);
+                  setNewProductData({
+                    category_id: '',
+                    name: '',
+                    base_price: '',
+                    unit: '',
+                    options: [{ option_name: '', price_adjustment: 0 }]
+                  });
+                }}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Category Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
+                <select
+                  value={newProductData.category_id}
+                  onChange={(e) => setNewProductData({ ...newProductData, category_id: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select a category</option>
+                  {productCategories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Product Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Product Name *</label>
+                <input
+                  type="text"
+                  value={newProductData.name}
+                  onChange={(e) => setNewProductData({ ...newProductData, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="e.g., Standard Business Cards"
+                />
+              </div>
+
+              {/* Base Price and Unit */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Base Price ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newProductData.base_price}
+                    onChange={(e) => setNewProductData({ ...newProductData, base_price: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="49.99"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Unit *</label>
+                  <input
+                    type="text"
+                    value={newProductData.unit}
+                    onChange={(e) => setNewProductData({ ...newProductData, unit: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="e.g., 500 cards"
+                  />
+                </div>
+              </div>
+
+              {/* Product Options */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Product Options *</label>
+                  <button
+                    type="button"
+                    onClick={handleAddOption}
+                    className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Option
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {newProductData.options.map((option, index) => (
+                    <div key={index} className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={option.option_name}
+                          onChange={(e) => handleUpdateOption(index, 'option_name', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Option name (e.g., Matte)"
+                        />
+                      </div>
+                      <div className="w-32">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={option.price_adjustment}
+                          onChange={(e) => handleUpdateOption(index, 'price_adjustment', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="+$0.00"
+                        />
+                      </div>
+                      {newProductData.options.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveOption(index)}
+                          className="p-2 text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Add price adjustments for premium options (e.g., +10 for Spot UV)
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowProductForm(false);
+                    setNewProductData({
+                      category_id: '',
+                      name: '',
+                      base_price: '',
+                      unit: '',
+                      options: [{ option_name: '', price_adjustment: 0 }]
+                    });
+                  }}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateProduct}
+                  className="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Create Product
+                </button>
               </div>
             </div>
           </div>

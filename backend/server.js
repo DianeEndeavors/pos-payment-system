@@ -105,14 +105,29 @@ app.get('/customers/search', async (req, res) => {
   try {
     const { query } = req.query;
 
-    if (!query || query.length < 2) {
+    // If no query or empty query, return all customers
+    if (!query || query.length === 0) {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      return res.json({ customers: data || [] });
+    }
+
+    // If query is too short, return empty
+    if (query.length < 2) {
       return res.json({ customers: [] });
     }
 
+    // Search with query
     const { data, error } = await supabase
       .from('customers')
       .select('*')
       .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`)
+      .order('created_at', { ascending: false })
       .limit(10);
 
     if (error) throw error;
