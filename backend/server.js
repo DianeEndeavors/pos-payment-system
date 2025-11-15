@@ -531,9 +531,10 @@ app.post('/products', async (req, res) => {
 app.put('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, base_price, unit, active } = req.body;
+    const { category_id, name, base_price, unit, active, options } = req.body;
 
     const updateData = {};
+    if (category_id !== undefined) updateData.category_id = category_id;
     if (name !== undefined) updateData.name = name;
     if (base_price !== undefined) updateData.base_price = base_price;
     if (unit !== undefined) updateData.unit = unit;
@@ -547,6 +548,55 @@ app.put('/products/:id', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // Update options if provided
+    if (options && options.length > 0) {
+      // Get existing options
+      const { data: existingOptions } = await supabase
+        .from('product_options')
+        .select('id')
+        .eq('product_id', id);
+
+      const existingIds = existingOptions?.map(opt => opt.id) || [];
+      const providedIds = options.filter(opt => opt.id).map(opt => opt.id);
+
+      // Delete options that are no longer in the list
+      const idsToDelete = existingIds.filter(id => !providedIds.includes(id));
+      if (idsToDelete.length > 0) {
+        await supabase
+          .from('product_options')
+          .delete()
+          .in('id', idsToDelete);
+      }
+
+      // Update or insert options
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        if (opt.id) {
+          // Update existing option
+          await supabase
+            .from('product_options')
+            .update({
+              option_name: opt.option_name,
+              price_adjustment: opt.price_adjustment || 0,
+              active: opt.active !== undefined ? opt.active : true,
+              display_order: i
+            })
+            .eq('id', opt.id);
+        } else {
+          // Insert new option
+          await supabase
+            .from('product_options')
+            .insert([{
+              product_id: id,
+              option_name: opt.option_name,
+              price_adjustment: opt.price_adjustment || 0,
+              active: opt.active !== undefined ? opt.active : true,
+              display_order: i
+            }]);
+        }
+      }
+    }
 
     res.json({ product: data });
   } catch (error) {

@@ -160,6 +160,8 @@ export default function PrintShopPOS() {
     options: [{ option_name: '', price_adjustment: 0 }]
   });
   const [productSearch, setProductSearch] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [editProductData, setEditProductData] = useState(null);
 
   // Fetch dashboard stats
   useEffect(() => {
@@ -450,6 +452,78 @@ export default function PrintShopPOS() {
       ...newProductData,
       options: updatedOptions
     });
+  };
+
+  // Edit product handlers
+  const handleAddEditOption = () => {
+    setEditProductData({
+      ...editProductData,
+      options: [...editProductData.options, { option_name: '', price_adjustment: 0, active: true }]
+    });
+  };
+
+  const handleRemoveEditOption = (index) => {
+    const updatedOptions = editProductData.options.filter((_, i) => i !== index);
+    setEditProductData({
+      ...editProductData,
+      options: updatedOptions.length > 0 ? updatedOptions : [{ option_name: '', price_adjustment: 0, active: true }]
+    });
+  };
+
+  const handleUpdateEditOption = (index, field, value) => {
+    const updatedOptions = [...editProductData.options];
+    updatedOptions[index][field] = value;
+    setEditProductData({
+      ...editProductData,
+      options: updatedOptions
+    });
+  };
+
+  // Update product
+  const handleUpdateProduct = async () => {
+    if (!editProductData.category_id || !editProductData.name || !editProductData.base_price || !editProductData.unit) {
+      alert('Please fill in all required fields (Category, Name, Price, Unit)');
+      return;
+    }
+
+    // Validate that at least one option has a name
+    const validOptions = editProductData.options.filter(opt => opt.option_name.trim() !== '');
+    if (validOptions.length === 0) {
+      alert('Please add at least one product option');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/products/${selectedProduct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...editProductData,
+          base_price: parseFloat(editProductData.base_price),
+          options: validOptions.map(opt => ({
+            id: opt.id,
+            option_name: opt.option_name,
+            price_adjustment: parseFloat(opt.price_adjustment || 0),
+            active: opt.active !== undefined ? opt.active : true,
+            display_order: opt.display_order || 0
+          }))
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update product');
+      }
+
+      setSelectedProduct(null);
+      setEditProductData(null);
+
+      // Refresh products
+      fetchProducts();
+      alert('Product updated successfully!');
+    } catch (error) {
+      console.error('Error updating product:', error);
+      alert('Failed to update product: ' + error.message);
+    }
   };
 
   // Cart functions
@@ -1680,7 +1754,30 @@ export default function PrintShopPOS() {
                       </div>
                       <div className="pl-7 space-y-1">
                         {data.items.map(item => (
-                          <div key={item.id} className="flex items-center justify-between text-sm py-1">
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              // Find the full product data from products array
+                              const fullProduct = products.find(p => p.id === item.id);
+                              if (fullProduct) {
+                                setSelectedProduct(fullProduct);
+                                setEditProductData({
+                                  category_id: fullProduct.category.id,
+                                  name: fullProduct.name,
+                                  base_price: fullProduct.base_price,
+                                  unit: fullProduct.unit,
+                                  options: fullProduct.options.map(opt => ({
+                                    id: opt.id,
+                                    option_name: opt.option_name,
+                                    price_adjustment: opt.price_adjustment,
+                                    active: opt.active,
+                                    display_order: opt.display_order
+                                  }))
+                                });
+                              }
+                            }}
+                            className="w-full flex items-center justify-between text-sm py-2 px-2 rounded hover:bg-gray-50 transition-colors text-left"
+                          >
                             <span className="text-gray-700">{item.name} - {item.unit}</span>
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-gray-900">
@@ -1689,8 +1786,9 @@ export default function PrintShopPOS() {
                               <span className="text-xs text-gray-500">
                                 ({item.options.length} options)
                               </span>
+                              <Edit className="w-4 h-4 text-gray-400" />
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -1986,6 +2084,153 @@ export default function PrintShopPOS() {
                   <span>Total</span>
                   <span className="text-indigo-600">${parseFloat(selectedOrder.total).toFixed(2)}</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Modal */}
+      {selectedProduct && editProductData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Edit Product</h2>
+              <button
+                onClick={() => {
+                  setSelectedProduct(null);
+                  setEditProductData(null);
+                }}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Category Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
+                <select
+                  value={editProductData.category_id}
+                  onChange={(e) => setEditProductData({ ...editProductData, category_id: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select a category</option>
+                  {productCategories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Product Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Product Name *</label>
+                <input
+                  type="text"
+                  value={editProductData.name}
+                  onChange={(e) => setEditProductData({ ...editProductData, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="e.g., Standard Business Cards"
+                />
+              </div>
+
+              {/* Base Price and Unit */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Base Price ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editProductData.base_price}
+                    onChange={(e) => setEditProductData({ ...editProductData, base_price: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="49.99"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Unit *</label>
+                  <input
+                    type="text"
+                    value={editProductData.unit}
+                    onChange={(e) => setEditProductData({ ...editProductData, unit: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="e.g., 500 cards"
+                  />
+                </div>
+              </div>
+
+              {/* Product Options */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Product Options *</label>
+                  <button
+                    type="button"
+                    onClick={handleAddEditOption}
+                    className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Option
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {editProductData.options.map((option, index) => (
+                    <div key={index} className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={option.option_name}
+                          onChange={(e) => handleUpdateEditOption(index, 'option_name', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Option name (e.g., Matte)"
+                        />
+                      </div>
+                      <div className="w-32">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={option.price_adjustment}
+                          onChange={(e) => handleUpdateEditOption(index, 'price_adjustment', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="+$0.00"
+                        />
+                      </div>
+                      {editProductData.options.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEditOption(index)}
+                          className="p-2 text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Add price adjustments for premium options (e.g., +10 for Spot UV)
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    setEditProductData(null);
+                  }}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateProduct}
+                  className="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Save Changes
+                </button>
               </div>
             </div>
           </div>
