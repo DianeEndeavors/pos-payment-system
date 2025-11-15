@@ -596,6 +596,58 @@ export default function PrintShopPOS() {
     }
   };
 
+  // Test payment (skip Stripe)
+  const handleTestPayment = async () => {
+    if (!selectedCustomer) {
+      alert('Please select a customer first');
+      return;
+    }
+
+    setIsProcessing(true);
+    setPaymentStatus(null);
+
+    try {
+      // Save order directly to database with test payment ID
+      const response = await fetch(`${BACKEND_URL}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: selectedCustomer.id,
+          cart,
+          subtotal,
+          tax,
+          total,
+          notes: orderNotes,
+          paymentIntentId: `test_${Date.now()}` // Test payment ID
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to create order');
+
+      setPaymentStatus({
+        type: 'success',
+        message: `Test payment successful! Order total: $${total.toFixed(2)}`
+      });
+
+      setTimeout(() => {
+        setCart([]);
+        setSelectedCustomer(null);
+        setOrderNotes('');
+        setStep('pos');
+        setPaymentStatus(null);
+        setCurrentPage('home');
+        fetchDashboardStats();
+      }, 2000);
+    } catch (error) {
+      setPaymentStatus({
+        type: 'error',
+        message: error.message || 'Failed to process test payment'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -1209,17 +1261,38 @@ export default function PrintShopPOS() {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-3 pt-4">
+                <div className="space-y-3 pt-4">
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setStep('pos')}
+                      className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Back to Cart
+                    </button>
+                    <button
+                      onClick={handleSubmitOrder}
+                      disabled={isProcessing || !selectedCustomer}
+                      className="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader className="w-5 h-5 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-5 h-5" />
+                          Proceed to Payment
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Test Payment Button */}
                   <button
-                    onClick={() => setStep('pos')}
-                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Back to Cart
-                  </button>
-                  <button
-                    onClick={handleSubmitOrder}
+                    onClick={handleTestPayment}
                     disabled={isProcessing || !selectedCustomer}
-                    className="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                    className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
                   >
                     {isProcessing ? (
                       <>
@@ -1228,8 +1301,8 @@ export default function PrintShopPOS() {
                       </>
                     ) : (
                       <>
-                        <CreditCard className="w-5 h-5" />
-                        Proceed to Payment
+                        <CheckCircle className="w-5 h-5" />
+                        Test Payment (Skip Stripe)
                       </>
                     )}
                   </button>
